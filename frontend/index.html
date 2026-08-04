@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise AI Research Agent | Autonomous Knowledge Engine</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f6ff',
+                            100: '#e0edff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                            dark: '#0b0f19',
+                            card: '#131b2e',
+                            border: '#1f2d4d'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- React & ReactDOM CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <!-- Babel CDN for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #070a12;
+            color: #f3f4f6;
+        }
+        .glass-panel {
+            background: rgba(19, 27, 46, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-panel-glow {
+            background: rgba(19, 27, 46, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.15);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #60a5fa 0%, #a855f7 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .pulse-ring {
+            animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const API_BASE = "http://localhost:8000/api";
+
+        function App() {
+            const [topic, setTopic] = useState("");
+            const [currentSession, setCurrentSession] = useState(null);
+            const [pastSessions, setPastSessions] = useState([]);
+            const [activeTab, setActiveTab] = useState("summary");
+            const [loading, setLoading] = useState(false);
+            const [kbQuery, setKbQuery] = useState("");
+            const [kbResults, setKbResults] = useState(null);
+            const [searchLoading, setSearchLoading] = useState(false);
+
+            // Suggested research topic presets
+            const presets = [
+                "How is AI transforming retail operations?",
+                "What AI technologies are changing manufacturing?",
+                "Enterprise Cybersecurity & Threat Intelligence AI",
+                "Future of Banking AI & Autonomous Risk Models",
+                "Supply Chain Automation & Dynamic Demand Forecasting"
+            ];
+
+            useEffect(() => {
+                fetchPastSessions();
+            }, []);
+
+            useEffect(() => {
+                let interval;
+                if (currentSession && (currentSession.status !== "COMPLETED" && currentSession.status !== "FAILED")) {
+                    interval = setInterval(() => {
+                        pollSession(currentSession.id);
+                    }, 2000);
+                }
+                return () => clearInterval(interval);
+            }, [currentSession]);
+
+            const fetchPastSessions = async () => {
+                try {
+                    const res = await fetch(`${API_BASE}/research/sessions`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setPastSessions(data);
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch sessions", e);
+                }
+            };
+
+            const pollSession = async (sessionId) => {
+                try {
+                    const res = await fetch(`${API_BASE}/research/session/${sessionId}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setCurrentSession(data);
+                        fetchPastSessions();
+                    }
+                } catch (e) {
+                    console.error("Poll error", e);
+                }
+            };
+
+            const startResearch = async (selectedTopic) => {
+                const queryTopic = selectedTopic || topic;
+                if (!queryTopic || queryTopic.trim().length < 3) return;
+
+                setLoading(true);
+                try {
+                    const res = await fetch(`${API_BASE}/research/start`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ topic: queryTopic })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setCurrentSession(data);
+                    }
+                } catch (e) {
+                    alert("Error launching research pipeline: " + e.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const searchKnowledgeBase = async () => {
+                if (!kbQuery) return;
+                setSearchLoading(true);
+                try {
+                    const res = await fetch(`${API_BASE}/knowledge/search`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ query: kbQuery, top_k: 5 })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setKbResults(data);
+                    }
+                } catch (e) {
+                    console.error("Knowledge search error", e);
+                } finally {
+                    setSearchLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* Header Nav */}
+                    <header className="glass-panel sticky top-0 z-50 px-6 py-4 flex items-center justify-between border-b border-gray-800">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                <i className="fa-solid fa-brain text-white text-xl"></i>
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                                    Modus Enterprise AI <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">Research Agent</span>
+                                </h1>
+                                <p className="text-xs text-gray-400">Autonomous Evidence Synthesis & Vector Memory Engine</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-2 text-xs bg-gray-900/80 px-3 py-1.5 rounded-lg border border-gray-800 text-gray-300">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                                <span>Engine: <strong>Grok (xAI) + ChromaDB</strong></span>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Main Layout */}
+                    <main className="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        {/* Left Column: Research Control Center & Live Status */}
+                        <div className="lg:col-span-4 space-y-6">
+                            {/* Research Launcher */}
+                            <div className="glass-panel p-6 rounded-2xl space-y-4">
+                                <div className="flex items-center space-x-2 text-blue-400 font-semibold text-sm">
+                                    <i className="fa-solid fa-magnifying-glass"></i>
+                                    <span>New Research Topic</span>
+                                </div>
+                                <p className="text-xs text-gray-400">
+                                    Enter any enterprise research prompt. The backend will autonomously execute multi-stage web search, vector embedding, evidence extraction, and contradiction analysis.
+                                </p>
+
+                                <div className="space-y-3">
+                                    <textarea
+                                        rows="3"
+                                        value={topic}
+                                        onChange={(e) => setTopic(e.target.value)}
+                                        placeholder="e.g. How is AI transforming retail operations?"
+                                        className="w-full bg-gray-900/90 text-sm text-gray-100 rounded-xl p-3 border border-gray-800 focus:border-blue-500 focus:outline-none transition"
+                                    ></textarea>
+
+                                    <button
+                                        onClick={() => startResearch()}
+                                        disabled={loading}
+                                        className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold rounded-xl transition shadow-lg shadow-blue-600/30 flex items-center justify-center space-x-2 disabled:opacity-50"
+                                    >
+                                        {loading ? (
+                                            <>
+                                                <i className="fa-solid fa-circle-notch animate-spin"></i>
+                                                <span>Initializing Agent...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="fa-solid fa-bolt"></i>
+                                                <span>Execute Research Pipeline</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+
+                                {/* Preset Suggestions */}
+                                <div className="pt-3 border-t border-gray-800/60">
+                                    <span className="text-xs font-semibold text-gray-400 block mb-2">Evaluator Quick Presets:</span>
+                                    <div className="space-y-1.5">
+                                        {presets.map((p, idx) => (
+                                            <button
+                                                key={idx}
+                                                onClick={() => { setTopic(p); startResearch(p); }}
+                                                className="w-full text-left text-xs bg-gray-900/60 hover:bg-blue-950/40 text-gray-300 hover:text-blue-300 px-3 py-2 rounded-lg border border-gray-800/80 transition flex items-center justify-between group"
+                                            >
+                                                <span className="truncate">{p}</span>
+                                                <i className="fa-solid fa-arrow-right opacity-0 group-hover:opacity-100 text-blue-400 text-2xs transition"></i>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Live Pipeline Execution Card */}
+                            {currentSession && (
+                                <div className="glass-panel-glow p-6 rounded-2xl space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Active Pipeline</span>
+                                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                                            currentSession.status === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                            currentSession.status === 'FAILED' ? 'bg-red-500/20 text-red-400' :
+                                            'bg-blue-500/20 text-blue-400 animate-pulse'
+                                        }`}>
+                                            {currentSession.status}
+                                        </span>
+                                    </div>
+
+                                    <h3 className="text-sm font-semibold text-white leading-snug">{currentSession.topic}</h3>
+
+                                    {/* Progress Bar */}
+                                    <div className="space-y-1.5">
+                                        <div className="flex justify-between text-xs text-gray-400">
+                                            <span>{currentSession.current_step}</span>
+                                            <span className="font-bold text-blue-400">{currentSession.progress}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-900 h-2.5 rounded-full overflow-hidden p-0.5 border border-gray-800">
+                                            <div
+                                                className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500"
+                                                style={{ width: `${currentSession.progress}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* History Sidebar */}
+                            <div className="glass-panel p-5 rounded-2xl space-y-3">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Research History & Memory</h3>
+                                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                    {pastSessions.map((s) => (
+                                        <div
+                                            key={s.id}
+                                            onClick={() => setCurrentSession(s)}
+                                            className={`p-3 rounded-xl border text-xs cursor-pointer transition ${
+                                                currentSession?.id === s.id
+                                                    ? 'bg-blue-950/40 border-blue-500/50 text-white'
+                                                    : 'bg-gray-900/40 border-gray-800/80 text-gray-400 hover:text-gray-200 hover:border-gray-700'
+                                            }`}
+                                        >
+                                            <div className="font-medium truncate text-gray-200">{s.topic}</div>
+                                            <div className="flex justify-between items-center mt-1.5 text-2xs text-gray-500">
+                                                <span>{new Date(s.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                                <span className="text-blue-400 font-semibold">{s.sources?.length || 0} Sources</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right Column: Dynamic Deep Research Results Dashboard */}
+                        <div className="lg:col-span-8 space-y-6">
+                            {currentSession ? (
+                                <div className="glass-panel rounded-2xl p-6 space-y-6">
+                                    {/* Result Header & Navigation Tabs */}
+                                    <div className="border-b border-gray-800 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                        <div>
+                                            <h2 className="text-lg font-bold text-white">{currentSession.topic}</h2>
+                                            <p className="text-xs text-gray-400 mt-0.5">Session ID: {currentSession.id}</p>
+                                        </div>
+
+                                        {/* Navigation Tabs */}
+                                        <div className="flex flex-wrap gap-1.5 bg-gray-900/90 p-1 rounded-xl border border-gray-800 text-xs">
+                                            <button
+                                                onClick={() => setActiveTab("summary")}
+                                                className={`px-3 py-1.5 rounded-lg transition font-medium ${activeTab === "summary" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                                            >
+                                                Executive Summary
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveTab("questions")}
+                                                className={`px-3 py-1.5 rounded-lg transition font-medium ${activeTab === "questions" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                                            >
+                                                Questions ({currentSession.questions?.length || 0})
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveTab("sources")}
+                                                className={`px-3 py-1.5 rounded-lg transition font-medium ${activeTab === "sources" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                                            >
+                                                Sources ({currentSession.sources?.length || 0})
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveTab("evidence")}
+                                                className={`px-3 py-1.5 rounded-lg transition font-medium ${activeTab === "evidence" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                                            >
+                                                Evidence ({currentSession.evidences?.length || 0})
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveTab("contradictions")}
+                                                className={`px-3 py-1.5 rounded-lg transition font-medium ${activeTab === "contradictions" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                                            >
+                                                Contradictions ({currentSession.contradictions?.length || 0})
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveTab("vector_search")}
+                                                className={`px-3 py-1.5 rounded-lg transition font-medium ${activeTab === "vector_search" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                                            >
+                                                Vector Search
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* TAB 1: EXECUTIVE SUMMARY */}
+                                    {activeTab === "summary" && (
+                                        <div className="space-y-6">
+                                            {currentSession.conclusion ? (
+                                                <>
+                                                    <div className="bg-gray-900/60 p-5 rounded-xl border border-gray-800 space-y-3">
+                                                        <h4 className="text-sm font-bold text-blue-400 flex items-center gap-2">
+                                                            <i className="fa-solid fa-file-contract"></i>
+                                                            Executive Synthesis
+                                                        </h4>
+                                                        <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-line">
+                                                            {currentSession.conclusion.executive_summary}
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="bg-gray-900/40 p-4 rounded-xl border border-gray-800 space-y-2">
+                                                            <h5 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Key Findings Summary</h5>
+                                                            <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">
+                                                                {currentSession.conclusion.key_findings_summary}
+                                                            </p>
+                                                        </div>
+
+                                                        <div className="bg-gray-900/40 p-4 rounded-xl border border-gray-800 space-y-2">
+                                                            <h5 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Strategic Recommendations</h5>
+                                                            <ul className="space-y-1.5 text-xs text-gray-300">
+                                                                {currentSession.conclusion.strategic_recommendations.map((rec, i) => (
+                                                                    <li key={i} className="flex items-start gap-2">
+                                                                        <i className="fa-solid fa-circle-check text-emerald-400 text-2xs mt-1"></i>
+                                                                        <span>{rec}</span>
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Traceable Citations Footnotes */}
+                                                    <div className="space-y-3 pt-4 border-t border-gray-800">
+                                                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Traceable Source Citations</h4>
+                                                        <div className="space-y-2">
+                                                            {currentSession.conclusion.traceable_citations.map((cit, idx) => (
+                                                                <div key={idx} className="p-3 bg-gray-900/30 rounded-lg border border-gray-800/80 flex items-start justify-between text-xs">
+                                                                    <div>
+                                                                        <div className="font-semibold text-blue-300">{cit.source}</div>
+                                                                        <div className="text-gray-400 mt-0.5">{cit.claim}</div>
+                                                                        <a href={cit.url} target="_blank" rel="noreferrer" className="text-2xs text-blue-400 hover:underline mt-1 inline-block">
+                                                                            {cit.url}
+                                                                        </a>
+                                                                    </div>
+                                                                    <span className="text-2xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                                                        Confidence: {(cit.confidence_score * 100).toFixed(0)}%
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="text-center py-12 text-gray-400 space-y-3">
+                                                    <i className="fa-solid fa-spinner animate-spin text-3xl text-blue-500"></i>
+                                                    <p className="text-sm">Research pipeline actively collecting and embedding evidence...</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* TAB 2: QUESTIONS */}
+                                    {activeTab === "questions" && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {currentSession.questions.map((q) => (
+                                                <div key={q.id} className="p-4 bg-gray-900/50 rounded-xl border border-gray-800 space-y-2">
+                                                    <span className="text-2xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 uppercase font-semibold">
+                                                        {q.category}
+                                                    </span>
+                                                    <h4 className="text-sm font-semibold text-white">{q.question}</h4>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* TAB 3: SOURCES */}
+                                    {activeTab === "sources" && (
+                                        <div className="space-y-4">
+                                            {currentSession.sources.map((src) => (
+                                                <div key={src.id} className="p-4 bg-gray-900/50 rounded-xl border border-gray-800 space-y-2">
+                                                    <div className="flex justify-between items-start">
+                                                        <h4 className="text-sm font-semibold text-blue-300">{src.title}</h4>
+                                                        <span className="text-2xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">
+                                                            Score: {src.credibility_score}
+                                                        </span>
+                                                    </div>
+                                                    <a href={src.url} target="_blank" rel="noreferrer" className="text-xs text-gray-400 hover:underline block truncate">
+                                                        {src.url}
+                                                    </a>
+                                                    <p className="text-xs text-gray-300 bg-gray-950/60 p-3 rounded-lg border border-gray-800/60">
+                                                        {src.content_snippet}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* TAB 4: EVIDENCE */}
+                                    {activeTab === "evidence" && (
+                                        <div className="space-y-3">
+                                            {currentSession.evidences.map((ev) => (
+                                                <div key={ev.id} className="p-4 bg-gray-900/50 rounded-xl border border-gray-800 flex items-start justify-between gap-4">
+                                                    <div className="space-y-1">
+                                                        <span className="text-2xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold uppercase">
+                                                            {ev.category}
+                                                        </span>
+                                                        <p className="text-xs text-gray-200 font-medium leading-relaxed">{ev.claim}</p>
+                                                        <div className="text-2xs text-gray-500">{ev.publication_info}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className="text-xs font-bold text-emerald-400">
+                                                            {(ev.confidence_score * 100).toFixed(0)}%
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* TAB 5: CONTRADICTIONS */}
+                                    {activeTab === "contradictions" && (
+                                        <div className="space-y-4">
+                                            {currentSession.contradictions.map((c) => (
+                                                <div key={c.id} className="p-5 bg-red-950/20 rounded-xl border border-red-900/40 space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">
+                                                            <i className="fa-solid fa-triangle-exclamation"></i>
+                                                            {c.topic}
+                                                        </span>
+                                                        <span className="text-2xs px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-semibold">
+                                                            {c.contradiction_type}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                                                        <div className="bg-gray-900/80 p-3 rounded-lg border border-gray-800">
+                                                            <div className="text-2xs font-semibold text-gray-400 mb-1">{c.source_a_title}</div>
+                                                            <div className="text-gray-200">{c.claim_a}</div>
+                                                        </div>
+                                                        <div className="bg-gray-900/80 p-3 rounded-lg border border-gray-800">
+                                                            <div className="text-2xs font-semibold text-gray-400 mb-1">{c.source_b_title}</div>
+                                                            <div className="text-gray-200">{c.claim_b}</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-gray-900/60 p-3 rounded-lg border border-gray-800/80 text-xs space-y-1">
+                                                        <div className="text-2xs font-bold text-blue-400">Analysis & Resolution:</div>
+                                                        <p className="text-gray-300">{c.analysis}</p>
+                                                        <p className="text-emerald-400 font-medium mt-1">{c.resolution}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* TAB 6: VECTOR SEARCH */}
+                                    {activeTab === "vector_search" && (
+                                        <div className="space-y-4">
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={kbQuery}
+                                                    onChange={(e) => setKbQuery(e.target.value)}
+                                                    placeholder="Query enterprise knowledge base vectors in ChromaDB..."
+                                                    className="flex-1 bg-gray-900 text-xs text-white p-3 rounded-xl border border-gray-800 focus:outline-none focus:border-blue-500"
+                                                />
+                                                <button
+                                                    onClick={searchKnowledgeBase}
+                                                    disabled={searchLoading}
+                                                    className="px-4 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition"
+                                                >
+                                                    {searchLoading ? "Searching..." : "Vector Search"}
+                                                </button>
+                                            </div>
+
+                                            {kbResults && (
+                                                <div className="space-y-3">
+                                                    <div className="text-xs text-gray-400">Found {kbResults.total_results} matching vector embeddings</div>
+                                                    {kbResults.matches.map((m, idx) => (
+                                                        <div key={idx} className="p-3 bg-gray-900/60 rounded-xl border border-gray-800 text-xs space-y-1">
+                                                            <div className="flex justify-between text-2xs text-blue-400">
+                                                                <span>{m.metadata.title || "Vector Chunk"}</span>
+                                                                <span>Similarity: {(m.similarity_score * 100).toFixed(1)}%</span>
+                                                            </div>
+                                                            <p className="text-gray-300">{m.chunk_text}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="glass-panel rounded-2xl p-12 text-center space-y-4">
+                                    <div className="w-16 h-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mx-auto text-blue-400 text-2xl">
+                                        <i className="fa-solid fa-compass-drafting"></i>
+                                    </div>
+                                    <h3 className="text-base font-bold text-white">No Active Research Selected</h3>
+                                    <p className="text-xs text-gray-400 max-w-md mx-auto">
+                                        Launch a research prompt on the left panel or click an evaluator quick preset to observe the live multi-stage research pipeline.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+</body>
+</html>

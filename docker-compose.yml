@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: enterprise_research_db
+    environment:
+      POSTGRES_DB: enterprise_research
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: enterprise_research_backend
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgrespassword@postgres:5432/enterprise_research
+      - CHROMA_PERSIST_DIR=./chroma_db
+      - XAI_API_KEY=${XAI_API_KEY}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/chroma_db:/app/chroma_db
+
+volumes:
+  postgres_data:
