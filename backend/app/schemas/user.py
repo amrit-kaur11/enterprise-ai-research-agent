@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -7,11 +7,11 @@ class UserBase(BaseModel):
     is_active: Optional[bool] = True
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(..., min_length=6, description="User registration password")
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=1, description="User login password")
 
 class UserResponse(UserBase):
     id: int
