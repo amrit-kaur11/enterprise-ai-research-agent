@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     
     # LLM Settings
     XAI_API_KEY: str = os.getenv("XAI_API_KEY", "")
-    GROK_MODEL: str = os.getenv("GROK_MODEL", "grok-beta")
+    GROK_MODEL: str = os.getenv("GROK_MODEL", "grok-2-latest")
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3")
     

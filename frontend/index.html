@@ -73,7 +73,17 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        const API_BASE = "https://enterprise-ai-research-agent-usu6.onrender.com";
+        const API_BASE = (function() {
+            if (window.REACT_APP_API_BASE) return window.REACT_APP_API_BASE.replace(/\/$/, "");
+            if (window.ENV_API_BASE) return window.ENV_API_BASE.replace(/\/$/, "");
+
+            const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+            if (isLocal) {
+                return "http://localhost:8000/api";
+            }
+
+            return "https://enterprise-ai-research-agent-usu6.onrender.com/api";
+        })();
 
         function App() {
             const [topic, setTopic] = useState("");

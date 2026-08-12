@@ -1,47 +1,75 @@
 import json
 import httpx
 import re
+import os
 from typing import Dict, Any, List
 from app.core.config import settings
 
 class LLMService:
-    def __init__(self):
-        self.xai_api_key = settings.XAI_API_KEY
-        self.grok_model = settings.GROK_MODEL
-        self.ollama_url = settings.OLLAMA_BASE_URL
-        self.ollama_model = settings.OLLAMA_MODEL
+    @property
+    def xai_api_key(self) -> str:
+        key = os.getenv("XAI_API_KEY") or settings.XAI_API_KEY or ""
+        return key.strip()
+
+    @property
+    def grok_model(self) -> str:
+        model = os.getenv("GROK_MODEL") or settings.GROK_MODEL or "grok-2-latest"
+        return model.strip()
+
+    @property
+    def ollama_url(self) -> str:
+        url = os.getenv("OLLAMA_BASE_URL") or settings.OLLAMA_BASE_URL or "http://localhost:11434"
+        return url.strip()
+
+    @property
+    def ollama_model(self) -> str:
+        model = os.getenv("OLLAMA_MODEL") or settings.OLLAMA_MODEL or "llama3"
+        return model.strip()
 
     async def generate_response(self, system_prompt: str, user_prompt: str) -> str:
         """
-        Sends prompt to Grok (xAI API). If unavailable, falls back to Ollama or structured reasoning engine.
+        Primary LLM Engine: Grok (xAI API).
+        Fallback 1: Local Ollama (if available).
+        Fallback 2: Deterministic Enterprise NLP Reasoning Engine.
         """
-        # 1. Try Grok xAI API
-        if self.xai_api_key:
+        api_key = self.xai_api_key
+        model = self.grok_model
+
+        # 1. Primary: Grok xAI API
+        if api_key:
+            print(f"[LLMService] Attempting Grok xAI API call (Model: {model}, API Key Configured: Yes)")
             try:
-                result = await self._call_grok(system_prompt, user_prompt)
-                if result:
+                result = await self._call_grok(system_prompt, user_prompt, api_key, model)
+                if result and result.strip():
+                    print("[LLMService] Grok xAI API call succeeded.")
+                    return result
+                else:
+                    print("[LLMService] Grok xAI API returned empty response body. Attempting fallback.")
+            except Exception as e:
+                print(f"[LLMService] Grok API exception error: {e}")
+        else:
+            print("[LLMService] Grok API key is NOT configured (XAI_API_KEY environment variable is empty). Skipping Grok.")
+
+        # 2. Fallback 1: Ollama (if running locally or containerized)
+        if self.ollama_url:
+            try:
+                result = await self._call_ollama(system_prompt, user_prompt)
+                if result and result.strip():
+                    print("[LLMService] Ollama API fallback succeeded.")
                     return result
             except Exception as e:
-                print(f"[LLMService] Grok API call error: {e}")
+                print(f"[LLMService] Ollama call error: {e}")
 
-        # 2. Try Ollama Fallback
-        try:
-            result = await self._call_ollama(system_prompt, user_prompt)
-            if result:
-                return result
-        except Exception as e:
-            print(f"[LLMService] Ollama call error: {e}")
-
-        # 3. Fallback Heuristic Reasoning Engine
+        # 3. Fallback 2: Deterministic Heuristic Reasoning Engine
         return await self._fallback_reasoning_engine(system_prompt, user_prompt)
 
-    async def _call_grok(self, system_prompt: str, user_prompt: str) -> str:
+    async def _call_grok(self, system_prompt: str, user_prompt: str, api_key: str, model: str) -> str:
         headers = {
-            "Authorization": f"Bearer {self.xai_api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
         payload = {
-            "model": self.grok_model,
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -52,7 +80,13 @@ class LLMService:
             resp = await client.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload)
             if resp.status_code == 200:
                 data = resp.json()
-                return data["choices"][0]["message"]["content"]
+                choices = data.get("choices", [])
+                if choices and len(choices) > 0:
+                    return choices[0].get("message", {}).get("content", "")
+            else:
+                # Sanitize error output to prevent exposing secret keys
+                sanitized_text = resp.text[:300].replace(api_key, "[REDACTED_API_KEY]")
+                print(f"[LLMService] Grok xAI API returned HTTP Status {resp.status_code}: {sanitized_text}")
         return ""
 
     async def _call_ollama(self, system_prompt: str, user_prompt: str) -> str:
@@ -61,7 +95,7 @@ class LLMService:
             "prompt": f"System: {system_prompt}\nUser: {user_prompt}",
             "stream": False
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(f"{self.ollama_url}/api/generate", json=payload)
             if resp.status_code == 200:
                 data = resp.json()
@@ -88,7 +122,6 @@ class LLMService:
 
         # If requesting JSON structured analysis (Evidence, Findings, Contradictions, Conclusion)
         if "json" in system_prompt.lower() or "json" in user_prompt.lower():
-            # Return high-level structured analysis based on context strings in prompt
             return json.dumps({
                 "evidences": [
                     {

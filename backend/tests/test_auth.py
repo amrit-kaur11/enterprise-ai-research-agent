@@ -1,4 +1,5 @@
 import pytest
+import os
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -7,21 +8,36 @@ from app.main import app
 from app.core.database import Base, get_db
 from app.core.security import get_password_hash, verify_password
 
-# In-memory test database setup
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_auth.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+TEST_DB_FILE = "./test_auth.db"
 
-Base.metadata.create_all(bind=engine)
+@pytest.fixture(autouse=True)
+def clean_db():
+    if os.path.exists(TEST_DB_FILE):
+        try:
+            os.remove(TEST_DB_FILE)
+        except Exception:
+            pass
+    
+    test_engine = create_engine(f"sqlite:///{TEST_DB_FILE}", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=test_engine)
+    TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
+    def override_get_db():
+        db = TestingSession()
+        try:
+            yield db
+        finally:
+            db.close()
 
-app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+    app.dependency_overrides.clear()
+    if os.path.exists(TEST_DB_FILE):
+        try:
+            os.remove(TEST_DB_FILE)
+        except Exception:
+            pass
+
 client = TestClient(app)
 
 def test_password_hashing_and_verification_normal():
@@ -35,7 +51,6 @@ def test_password_hashing_and_verification_normal():
     assert verify_password("", hashed) is False
 
 def test_password_hashing_and_verification_long_password():
-    # Password exceeding 72 bytes (120 characters)
     long_password = "SuperLongEnterprisePasswordExcreedingBcryptLimit_" + ("a" * 80) + "_2026!"
     assert len(long_password.encode('utf-8')) > 72
 
@@ -44,7 +59,7 @@ def test_password_hashing_and_verification_long_password():
     assert hashed != long_password
     assert hashed.startswith("$2b$")
     assert verify_password(long_password, hashed) is True
-    assert verify_password(long_password[:-1], hashed) is False  # slight modification fails
+    assert verify_password(long_password[:-1], hashed) is False
     assert verify_password("ShortPassword", hashed) is False
 
 def test_user_registration_and_login_flow():
@@ -56,7 +71,7 @@ def test_user_registration_and_login_flow():
         "/api/auth/register",
         json={"email": email, "full_name": "Enterprise Tester", "password": password}
     )
-    assert reg_response.status_code == 200
+    assert reg_response.status_code == 200, reg_response.text
     reg_data = reg_response.json()
     assert reg_data["email"] == email
     assert "id" in reg_data
@@ -73,7 +88,7 @@ def test_user_registration_and_login_flow():
         "/api/auth/login",
         json={"email": email, "password": password}
     )
-    assert login_response.status_code == 200
+    assert login_response.status_code == 200, login_response.text
     login_data = login_response.json()
     assert "access_token" in login_data
     assert login_data["token_type"] == "bearer"
@@ -87,17 +102,17 @@ def test_user_registration_and_login_flow():
 
 def test_user_registration_long_password():
     email = "longpass.user@enterprise.ai"
-    long_password = "X" * 150  # 150 char password
+    long_password = "X" * 150
 
     reg_response = client.post(
         "/api/auth/register",
         json={"email": email, "full_name": "Long Password User", "password": long_password}
     )
-    assert reg_response.status_code == 200
+    assert reg_response.status_code == 200, reg_response.text
 
     login_response = client.post(
         "/api/auth/login",
         json={"email": email, "password": long_password}
     )
-    assert login_response.status_code == 200
+    assert login_response.status_code == 200, login_response.text
     assert "access_token" in login_response.json()
